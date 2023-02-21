@@ -1,0 +1,1 @@
+lipo -create target/aarch64-apple-darwin/debug/libmath_library.a target/x86_64-apple-ios/debug/libmath_library.a -output target/lib_math.a
