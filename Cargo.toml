@@ -9,6 +9,11 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8"
+lazy_static = "1.4.0"
+fraction = "0.13"
+crossterm = "0.26.1"
+colored = "2.0.0"
+
 [lib]
 name = "math_library"
 path = "src/lib/lib.rs"
@@ -23,6 +28,3 @@ criterion = "0.4"
 [[bench]]
 name = "lib_bench"
 harness = false
-
-[build-dependencies]
-bindgen = "0.64.0"

@@ -1,10 +1,9 @@
-pub mod equation;
+pub mod tokeniser;
 pub mod math;
-pub mod vector;
 pub mod matrix;
-pub mod AugmentedMatrix;
 pub use matrix::Matrix;
-pub use vector::Vector;
+#[macro_use]
+extern crate lazy_static;
 
 #[no_mangle]
 pub extern "C" fn hello_world() {

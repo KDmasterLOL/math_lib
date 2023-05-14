@@ -1,31 +1,41 @@
-use crate::Vector;
+use fraction::Fraction;
 use std::{
     collections::{binary_heap::Iter, HashMap},
     default,
+    fmt::Display,
     fs::DirEntry,
     iter::{zip, Filter, Skip, TakeWhile},
-    ops::{self, Add, AddAssign, Index, IndexMut, Neg, Rem, Sub},
+    ops::{self, Add, AddAssign, Index, IndexMut, Mul, Neg, Rem, Sub},
     rc, vec,
 };
 
-const MATRIX_COUNT_ROWS: usize = 4;
-const MATRIX_COUNT_COLS: usize = 4;
+pub const MATRIX_COUNT_ROWS: usize = 8;
+pub const MATRIX_COUNT_COLS: usize = 8;
 
-type ElementMatrix = f32;
+type ElementMatrix = f64;
 
+fn round_to(num: ElementMatrix, decimals: u32) -> ElementMatrix {
+    let y = 10i32.pow(decimals) as ElementMatrix;
+    ((num * y) as i64) as ElementMatrix / y
+}
+
+#[repr(C)]
 #[derive(PartialEq, Debug, Default, Clone, Copy)]
 pub enum Direction {
     #[default]
     Row,
     Col,
 }
-
+#[repr(C)]
 #[derive(PartialEq, Debug, Default, Clone, Copy)]
 pub struct PosElem {
     pub row: usize,
     pub col: usize,
 }
 impl PosElem {
+    pub fn zero() -> Self {
+        Self { row: 0, col: 0 }
+    }
     pub fn new(row: usize, col: usize) -> Self {
         PosElem { row, col }
     }
@@ -35,10 +45,10 @@ impl PosElem {
             col: size,
         }
     }
-    pub fn Row(row: usize) -> Self {
+    pub fn row(row: usize) -> Self {
         PosElem { row: row, col: 0 }
     }
-    pub fn Col(col: usize) -> Self {
+    pub fn col(col: usize) -> Self {
         PosElem { row: 0, col: col }
     }
     pub fn index2pos(&self, index: usize, direction: &Direction) -> PosElem {
@@ -56,6 +66,9 @@ impl PosElem {
     }
     pub fn iter(&self, direction: Direction) -> MatTraverse {
         MatTraverse::new(self.clone(), direction)
+    }
+    pub fn iter_skip(&self, direction: Direction, pos: PosElem) -> Skip<MatTraverse> {
+        MatTraverse::new(self.clone(), direction).skip(self.pos2index(pos, direction))
     }
 }
 impl From<(usize, usize)> for PosElem {
@@ -109,7 +122,12 @@ impl Sub<usize> for PosElem {
         (self.row - rhs, self.col - rhs).into()
     }
 }
-
+impl Display for PosElem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(row: {}, col: {})", self.row, self.col)
+    }
+}
+#[repr(C)]
 #[derive(PartialEq, Debug)]
 pub struct MatTraverse {
     current_element: usize,
@@ -143,17 +161,28 @@ impl MatTraverse {
             end: count.into(),
         }
     }
-    pub fn skip_pos(self, pos: PosElem) -> Skip<MatTraverse> {
-        let index = self.count.pos2index(pos, self.direction);
-        self.skip(index)
-    }
 }
-
-#[derive(Debug)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct Matrix {
     content: [[ElementMatrix; MATRIX_COUNT_COLS]; MATRIX_COUNT_ROWS],
     pub count: PosElem,
     direction: Direction,
+}
+impl Display for Matrix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut str = String::new();
+        let mut last_row: usize = 0;
+        str.push_str("Matrix:\n");
+        for pos in self.count.iter(Direction::Row) {
+            if pos.row != last_row {
+                str.push('\n');
+                last_row = pos.row;
+            }
+            str.push_str(&format!("{:.3}\t", self[pos]))
+        }
+        write!(f, "{}", str)
+    }
 }
 impl PartialEq for Matrix {
     fn eq(&self, other: &Self) -> bool {
@@ -169,45 +198,37 @@ impl PartialEq for Matrix {
         return true;
     }
 }
-impl ops::Index<PosElem> for Matrix {
+impl Index<PosElem> for Matrix {
     type Output = ElementMatrix;
     fn index(&self, index: PosElem) -> &Self::Output {
         &self.content[index.row][index.col]
     }
 }
-impl ops::Index<(usize, usize)> for Matrix {
-    type Output = ElementMatrix;
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        &self[PosElem::from(index)]
-    }
-}
-impl ops::Index<usize> for Matrix {
+impl Index<usize> for Matrix {
     type Output = ElementMatrix;
     fn index(&self, index: usize) -> &Self::Output {
         &self[PosElem::from(self.count.index2pos(index, &Direction::Row))]
     }
 }
-impl ops::IndexMut<PosElem> for Matrix {
+impl IndexMut<PosElem> for Matrix {
     fn index_mut(&mut self, index: PosElem) -> &mut Self::Output {
         &mut self.content[index.row][index.col]
     }
 }
-impl ops::IndexMut<usize> for Matrix {
+impl IndexMut<usize> for Matrix {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let pos: PosElem = self.count.index2pos(index, &Direction::Row).into();
         &mut self[pos]
     }
 }
-impl ops::IndexMut<(usize, usize)> for Matrix {
-    fn index_mut(&mut self, pos: (usize, usize)) -> &mut Self::Output {
-        &mut self[PosElem::from(pos)]
-    }
-}
-impl ops::Mul<&Matrix> for &Matrix {
+impl Mul<&Matrix> for &Matrix {
     type Output = Matrix;
 
     fn mul(self, rhs: &Matrix) -> Self::Output {
-        let mut result: Matrix = Matrix::new((self.count.row, rhs.count.col).into(), 0f32);
+        let mut result: Matrix = Matrix::new(
+            (self.count.row, rhs.count.col).into(),
+            ElementMatrix::default(),
+        );
 
         for pos_l in self.count.iter(Direction::Row) {
             for pos_r in rhs
@@ -215,39 +236,39 @@ impl ops::Mul<&Matrix> for &Matrix {
                 .iter(Direction::Row)
                 .take_while(|p| p.row == pos_l.col)
             {
-                result[(pos_l.row, pos_r.col)] += self[pos_l] * rhs[pos_r];
+                result[PosElem::new(pos_l.row, pos_r.col)] += self[pos_l] * rhs[pos_r];
             }
         }
         result
     }
 }
-impl ToString for Matrix {
-    fn to_string(&self) -> String {
-        let mut str = String::new();
-
-        let mut last_row: usize = 0;
-        for pos in self.count.iter(Direction::Row) {
-            if pos.row != last_row {
-                str.push('\n');
-                last_row = pos.row;
-            }
-            str.push_str(&format!("{} ", self[pos]))
-        }
-        str
-    }
-}
 
 impl Matrix {
-    pub fn new(count: PosElem, value: f32) -> Self {
+    #[export_name = "init"]
+    pub extern "C" fn new(count: PosElem, value: ElementMatrix) -> Self {
         Self {
             content: [[value; MATRIX_COUNT_COLS]; MATRIX_COUNT_ROWS],
             count,
             direction: Direction::Row,
         }
     }
-    pub fn test_matrix(value: f32) -> Self {
-        Self::new((3, 3).into(), value)
+    pub fn augmented_matrix(main_matrix: &[&[ElementMatrix]], constant: &[ElementMatrix]) -> Self {
+        let count = PosElem::new(main_matrix.len(), main_matrix[0].len() + 1);
+        if constant.len() != count.row {
+            panic!("AAA AUG");
+        }
+
+        let mut augmented_matrix = Self::new(count, ElementMatrix::default());
+        for pos in augmented_matrix.count.iter(Direction::Row) {
+            augmented_matrix[pos] = if pos.col + 1 == augmented_matrix.count.col {
+                constant[pos.row]
+            } else {
+                main_matrix[pos.row][pos.col]
+            };
+        }
+        augmented_matrix
     }
+    #[no_mangle]
     pub extern "C" fn is_square(&self) -> bool {
         self.count.col == self.count.row
     }
@@ -291,48 +312,162 @@ impl Matrix {
         let res: Box<dyn Iterator<Item = PosElem>> = if max_count.0 .1 >= max_count.1 .1 {
             Box::new(
                 self.count
-                    .iter(Direction::Row)
-                    .skip_pos((max_count.0 .0, 0).into())
+                    .iter_skip(Direction::Row, (max_count.0 .0, 0).into())
                     .take_while(move |p| p.row == max_count.0 .0),
             )
         } else {
             Box::new(
                 self.count
-                    .iter(Direction::Col)
-                    .skip_pos((max_count.0 .0, 0).into())
+                    .iter_skip(Direction::Col, (max_count.0 .0, 0).into())
                     .take_while(move |p| p.col == max_count.1 .0),
             )
         };
         Some(res)
     }
-    pub extern "C" fn determinant(&self) -> f32 {
+    #[no_mangle]
+    pub extern "C" fn determinant(&self) -> ElementMatrix {
         if self.is_square() == false {
             panic!()
         } else if self.count.row == 1 {
-            return self[(0, 0)];
+            return self[PosElem::zero()];
         }
         let target: Box<dyn Iterator<Item = PosElem>> = self.find_row_or_col_with_zero().unwrap_or(
             Box::new(self.count.iter(Direction::Row).take_while(|p| p.row == 0)),
         );
-        let mut result = 0f32;
+        let mut result = ElementMatrix::default();
         for pos in target {
             let power = if (pos.row + pos.col) % 2 == 1 {
-                -1f32
+                -1f64
             } else {
-                1f32
+                1f64
             };
             result += self.minor(pos).determinant() * power
         }
         return result;
     }
-    pub fn elem_is_exist(&self, pos: PosElem) -> bool {
+    #[no_mangle]
+    pub extern "C" fn is_exist(&self, pos: PosElem) -> bool {
         pos.row < self.count.row || pos.col < self.count.col
+    }
+    pub fn gauss(&mut self) {
+        let mut basises = Vec::<PosElem>::new();
+        let count_main_matrix = PosElem::new(self.count.row, self.count.col - 1);
+        for target_pos in count_main_matrix.iter(Direction::Col) {
+            if self[target_pos] == ElementMatrix::default()
+                || basises
+                    .iter()
+                    .any(|pos| pos.row == target_pos.row || pos.col == target_pos.col)
+            {
+                continue;
+            }
+            self.to_basis(target_pos);
+            basises.push(target_pos);
+        }
+    }
+    pub fn to_basis(&mut self, pos_resolution_el: PosElem) {
+        let value = self[pos_resolution_el];
+        self.count
+            .iter_skip(Direction::Row, PosElem::new(pos_resolution_el.row, 0))
+            .take_while(|pos| pos.row == pos_resolution_el.row)
+            .for_each(|pos| self[pos] /= value);
+        let mut resolution_col_el = ElementMatrix::default();
+        let mut last_row = usize::MAX;
+        for pos in self
+            .count
+            .iter(Direction::Row)
+            .filter(|p| p.row != pos_resolution_el.row)
+        {
+            if last_row != pos.row {
+                resolution_col_el = self[PosElem::new(pos.row, pos_resolution_el.col)];
+                last_row = pos.row;
+            };
+            let resolution_row_el = self[PosElem::new(pos_resolution_el.row, pos.col)];
+            self[pos] -= resolution_col_el * resolution_row_el;
+        }
+    }
+    pub fn simplex(&mut self) {
+        let mut is_optimum = false;
+        loop {
+            println!("{}", self);
+            let mut pos_resolution = PosElem::zero();
+            is_optimum = true;
+            for kriterian_pos in self
+                .count
+                .iter(Direction::Row)
+                .take_while(|pos| pos.row == 0)
+            {
+                if self[kriterian_pos] < ElementMatrix::default() && (self[kriterian_pos]*-10f64.powi(6)).round() > ElementMatrix::default() {
+                    pos_resolution.col = kriterian_pos.col;
+                    is_optimum = false;
+                    break;
+                }
+            }
+            if is_optimum == true {
+                break;
+            }
+            for pos_resolution_col in self
+                .count
+                .iter_skip(Direction::Col, pos_resolution)
+                .take_while(move |pos| pos.col == pos_resolution.clone().col)
+            {
+                let right_hand = self[PosElem::new(pos_resolution_col.row, self.count.col - 1)];
+                if self[pos_resolution_col] <= ElementMatrix::default() {
+                    continue;
+                }
+                let theta = self[PosElem::new(pos_resolution_col.row, self.count.col - 1)]
+                    / self[pos_resolution_col];
+                let theta_min = self[PosElem::new(pos_resolution.row, self.count.col - 1)]
+                    / self[pos_resolution];
+                if self[pos_resolution] <= ElementMatrix::default() || theta < theta_min {
+                    pos_resolution = pos_resolution_col;
+                }
+            }
+            self.to_basis(pos_resolution);
+        }
+    }
+    pub fn simplex_an(&mut self) {
+        let mut is_optimum = false;
+        loop {
+            let mut pos_resolution = PosElem::zero();
+            is_optimum = true;
+            for kriterian_pos in self
+                .count
+                .iter(Direction::Row)
+                .take_while(|pos| pos.row == 0)
+            {
+                if self[kriterian_pos] < ElementMatrix::default() {
+                    pos_resolution.col = kriterian_pos.col;
+                    is_optimum = false;
+                    break;
+                }
+            }
+            if is_optimum == true {
+                break;
+            }
+            for pos_resolution_col in self
+                .count
+                .iter_skip(Direction::Col, pos_resolution)
+                .take_while(move |pos| pos.col == pos_resolution.clone().col)
+            {
+                if self[pos_resolution_col] <= ElementMatrix::default() {
+                    continue;
+                }
+                let theta = self[PosElem::new(pos_resolution_col.row, self.count.col - 1)]
+                    / self[pos_resolution_col];
+                let theta_min = self[PosElem::new(pos_resolution.row, self.count.col - 1)]
+                    / self[pos_resolution];
+                if self[pos_resolution] <= ElementMatrix::default() || theta < theta_min {
+                    pos_resolution = pos_resolution_col;
+                }
+            }
+            self.to_basis(pos_resolution);
+        }
     }
 }
 impl From<&[&[ElementMatrix]]> for Matrix {
     fn from(arr: &[&[ElementMatrix]]) -> Self {
         let count: PosElem = (arr.len(), arr[0].len()).into();
-        let mut content = [[0f32; MATRIX_COUNT_COLS]; MATRIX_COUNT_ROWS];
+        let mut content = [[ElementMatrix::default(); MATRIX_COUNT_COLS]; MATRIX_COUNT_ROWS];
         for pos in count.iter(Direction::Row) {
             content[pos.row][pos.col] = arr[pos.row][pos.col]
         }
@@ -343,121 +478,78 @@ impl From<&[&[ElementMatrix]]> for Matrix {
         }
     }
 }
-const SIZE_AUGMENTED_MATRIX: usize = 3;
-pub struct AugmentedMatrix {
-    matrices: [Matrix; 2],
-    pub count: PosElem,
-}
-impl AugmentedMatrix {
-    pub fn new(matrices: [Matrix; 2]) -> Self {
-        let count = (
-            matrices[0].count.row,
-            matrices[0].count.col + matrices[1].count.col,
-        )
-            .into();
-        Self { matrices, count }
-    }
-    pub fn SLAE(&mut self) {
-        let mut start: PosElem = 0.into();
 
-        while start.row < self.count.row && start.col < self.count.col {
-            let mut start_value = self[start];
-
-            print!("Resolution number - {}", start_value);
-            if start_value == 0f32 {
-                println!(" (pass)");
-                start += 1;
-                continue;
-            }
-            print!("\n{} row: ", start.row);
-            self.count
-                .iter(Direction::Row)
-                .skip_pos(start)
-                .take_while(|p| p.row == start.row)
-                .for_each(|p| {
-                    print!("{} -> ", self[p]);
-                    self[p] /= start_value;
-                    print!("{}; ", self[p]);
-                });
-            println!("\n{}", self.to_string());
-
-            for pos_2 in self
-                .count
-                .iter(Direction::Row)
-                .filter(|p| p.row != start.row && p.col >= start.col)
-            {
-                if start.col == pos_2.col {
-                    start_value = self[pos_2]
-                };
-                let pos = (start.row, pos_2.col).into();
-                println!(
-                    "{:?} - {:?} * {} = {:?}",
-                    self[pos_2],
-                    self[pos],
-                    start_value,
-                    self[pos_2] - self[pos] * start_value
-                );
-                self[pos_2] -= self[pos] * start_value;
-            }
-            start += 1;
-        }
-    }
-}
-impl ToString for AugmentedMatrix {
-    fn to_string(&self) -> String {
-        let mut str = String::new();
-
-        let mut last_row: usize = 0;
-        for pos in self.count.iter(Direction::Row) {
-            if pos.row != last_row {
-                str.push('\n');
-                last_row = pos.row;
-            }
-            str.push_str(&format!("{} ", self[pos]))
-        }
-        str
-    }
-}
-impl IndexMut<PosElem> for AugmentedMatrix {
-    fn index_mut(&mut self, mut pos: PosElem) -> &mut Self::Output {
-        if pos.col >= self.matrices[0].count.col {
-            pos.col %= self.matrices[0].count.col - 1;
-            &mut self.matrices[1][pos]
-        } else {
-            &mut self.matrices[0][pos]
-        }
-    }
-}
-impl Index<PosElem> for AugmentedMatrix {
-    type Output = ElementMatrix;
-    fn index(&self, mut pos: PosElem) -> &Self::Output {
-        if pos.col >= self.matrices[0].count.col {
-            pos.col %= self.matrices[0].count.col - 1;
-            &self.matrices[1][pos]
-        } else {
-            &self.matrices[0][pos]
-        }
-    }
-}
+// pub fn slae(&mut self) {
+//     let mut last_pos = Vec::<PosElem>::with_capacity(self.count.row);
+//     while last_pos.len() < self.count.row {
+//         let mut start_value = ElementMatrix::default();
+//         for pos in self.count.iter(Direction::Col).filter(|p| {
+//             last_pos
+//                 .iter()
+//                 .any(|l_p| l_p.row == p.row || l_p.col == p.col)
+//                 == false
+//         }) {
+//             if self[pos] != ElementMatrix::default() {
+//                 last_pos.push(pos);
+//                 start_value = self[pos];
+//                 print!("Resolution number - {} at {}", start_value, pos);
+//                 break;
+//             }
+//         }
+//         if start_value == ElementMatrix::default() {
+//             return;
+//         }
+//         let start: PosElem = last_pos.last().unwrap().clone();
+//         print!("\nDiv {} row by {}: ", start.row, start_value);
+//         self.count
+//             .iter_skip(Direction::Row, start)
+//             .take_while(|p| p.row == start.row)
+//             .for_each(|p| {
+//                 print!("{} -> ", self[p]);
+//                 self[p] /= start_value;
+//                 print!("{}; ", self[p]);
+//             });
+//         for pos_2 in self
+//             .count
+//             .iter(Direction::Row)
+//             .filter(|p| p.row != start.row && p.col >= start.col)
+//         {
+//             if start.col == pos_2.col {
+//                 println!("procces {} row", pos_2.row);
+//                 start_value = self[pos_2]
+//             };
+//             let pos = (start.row, pos_2.col).into();
+//             println!(
+//                 "{:?} - {:?} * {} = {:?}",
+//                 self[pos_2],
+//                 self[pos],
+//                 start_value,
+//                 self[pos_2] - self[pos] * start_value
+//             );
+//             self[pos_2] -= self[pos] * start_value;
+//         }
+//         println!("\n{}", self);
+//     }
+// }
 #[test]
 fn find_zero_test() {
-    let mut matrix = Matrix::test_matrix(1f32);
+    let mut matrix = Matrix::new(3.into(), 1f64);
     assert_eq!(matrix.find_row_or_col_with_zero().is_none(), true);
-    matrix[(0, 0)] = 0f32;
+    matrix[PosElem::zero()] = ElementMatrix::default();
     assert_eq!(matrix.find_row_or_col_with_zero().is_some(), true);
 }
 #[test]
 fn mat_mul() {
-    let lhs = Matrix::new(PosElem::new(3, 2), 1f32);
-    let rhs = Matrix::new(PosElem::new(2, 3), 1f32);
+    let lhs = Matrix::new(PosElem::new(3, 2), 1f64);
+    let rhs = Matrix::new(PosElem::new(2, 3), 1f64);
     let result = &lhs * &rhs;
     assert_eq!(result.count, 3.into());
 }
 #[test]
 fn mat_traverse() {
-    let mut matrix = Matrix::test_matrix(1f32);
+    let mut matrix = Matrix::new(3.into(), 1f64);
     for pos in matrix.count.iter(Direction::Row) {
-        assert_eq!(matrix[pos], 1f32);
+        assert_eq!(matrix[pos], 1f64);
     }
     let mut count = 0;
     for pos in matrix.count.iter(Direction::Col).take_while(|p| p.col == 0) {
@@ -467,15 +559,6 @@ fn mat_traverse() {
 }
 #[test]
 fn test_determinant() {
-    let mat = Matrix::test_matrix(1f32);
-    assert_eq!(mat.determinant(), 0f32);
-}
-#[test]
-fn test_augmented_matrix() {
-    let mat = AugmentedMatrix::new([Matrix::test_matrix(1f32), Matrix::new((3, 1).into(), 1f32)]);
-    let mut rows = 0;
-    for pos in mat.count.iter(Direction::Row).take_while(|p| p.row == 0) {
-        rows += 1;
-    }
-    assert_eq!(rows, 4);
+    let mat = Matrix::new(3.into(), 1f64);
+    assert_eq!(mat.determinant(), ElementMatrix::default());
 }
