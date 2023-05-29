@@ -1,23 +1,14 @@
-use fraction::Fraction;
 use std::{
-    collections::{binary_heap::Iter, HashMap},
-    default,
+    collections::HashMap,
     fmt::Display,
-    fs::DirEntry,
-    iter::{zip, Filter, Skip, TakeWhile},
-    ops::{self, Add, AddAssign, Index, IndexMut, Mul, Neg, Rem, Sub},
-    rc, vec,
+    iter::{zip, Skip},
+    ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
 pub const MATRIX_COUNT_ROWS: usize = 8;
 pub const MATRIX_COUNT_COLS: usize = 8;
 
 type ElementMatrix = f64;
-
-fn round_to(num: ElementMatrix, decimals: u32) -> ElementMatrix {
-    let y = 10i32.pow(decimals) as ElementMatrix;
-    ((num * y) as i64) as ElementMatrix / y
-}
 
 #[repr(C)]
 #[derive(PartialEq, Debug, Default, Clone, Copy)]
@@ -268,6 +259,47 @@ impl Matrix {
         }
         augmented_matrix
     }
+    pub fn new_simplex_table(
+        criterian_function: &[ElementMatrix],
+        constraints: &[ElementMatrix],
+        coefficient_table: &[&[ElementMatrix]],
+    ) -> Self {
+        let count = PosElem::new(criterian_function.len() + 1, constraints.len() + 1);
+        let mut simplex_table = Self::new(count, ElementMatrix::default());
+        for pos in count.iter(Direction::Row) {
+            simplex_table[pos] = if pos == PosElem::zero() {
+                ElementMatrix::default()
+            } else if pos.row == 0 {
+                criterian_function[pos.col - 1]
+            } else if pos.col == 0 {
+                constraints[pos.row - 1]
+            } else {
+                coefficient_table[pos.row - 1][pos.col - 1]
+            }
+        }
+        simplex_table
+    }
+    pub fn new_simplex_table_with_artificial_cf(
+        criterian_function: &[ElementMatrix],
+        artificial_cf: &[ElementMatrix],
+        constraints: &[ElementMatrix],
+        coefficient_table: &[&[ElementMatrix]],
+    ) -> Self {
+        let count = PosElem::new(criterian_function.len() + 2, constraints.len() + 1);
+        let mut simplex_table = Self::new(count, ElementMatrix::default());
+        for pos in count.iter(Direction::Row) {
+            simplex_table[pos] = if pos.row == 0 {
+                criterian_function[pos.col]
+            } else if pos.row == 1 {
+                artificial_cf[pos.col]
+            } else if pos.col == 0 {
+                constraints[pos.row - 1]
+            } else {
+                coefficient_table[pos.row - 1][pos.col - 1]
+            }
+        }
+        simplex_table
+    }
     #[no_mangle]
     pub extern "C" fn is_square(&self) -> bool {
         self.count.col == self.count.row
@@ -345,23 +377,17 @@ impl Matrix {
         }
         return result;
     }
-    #[no_mangle]
-    pub extern "C" fn is_exist(&self, pos: PosElem) -> bool {
-        pos.row < self.count.row || pos.col < self.count.col
-    }
     pub fn gauss(&mut self) {
         let mut basises = Vec::<PosElem>::new();
         let count_main_matrix = PosElem::new(self.count.row, self.count.col - 1);
-        for target_pos in count_main_matrix.iter(Direction::Col) {
-            if self[target_pos] == ElementMatrix::default()
-                || basises
-                    .iter()
-                    .any(|pos| pos.row == target_pos.row || pos.col == target_pos.col)
+        for pos in count_main_matrix.iter(Direction::Col) {
+            if self[pos] == ElementMatrix::default()
+                || basises.iter().any(|p| p.row == pos.row || p.col == pos.col)
             {
                 continue;
             }
-            self.to_basis(target_pos);
-            basises.push(target_pos);
+            self.to_basis(pos);
+            basises.push(pos);
         }
     }
     pub fn to_basis(&mut self, pos_resolution_el: PosElem) {
@@ -385,21 +411,29 @@ impl Matrix {
             self[pos] -= resolution_col_el * resolution_row_el;
         }
     }
-    pub fn simplex(&mut self) {
+    pub fn find_basic_feasible_solution() -> Matrix {
+        todo!()
+    }
+    pub fn simplex(&mut self, kriterian_row: usize) {
         let mut is_optimum = false;
         loop {
             println!("{}", self);
-            let mut pos_resolution = PosElem::zero();
+            let mut pos_resolution = PosElem::new(kriterian_row, 0);
             is_optimum = true;
-            for kriterian_pos in self
+            let mut max_value = ElementMatrix::default();
+            for pos_kriterian_row in self
                 .count
-                .iter(Direction::Row)
-                .take_while(|pos| pos.row == 0)
+                .iter_skip(Direction::Row, PosElem::new(kriterian_row, 1))
+                .take_while(|pos| pos.row == kriterian_row)
             {
-                if self[kriterian_pos] < ElementMatrix::default() && (self[kriterian_pos]*-10f64.powi(6)).round() > ElementMatrix::default() {
-                    pos_resolution.col = kriterian_pos.col;
+                let kriterian_value = self[pos_kriterian_row];
+                if max_value < kriterian_value.abs()
+                    && kriterian_value.abs() > ElementMatrix::EPSILON
+                    && self[pos_kriterian_row].signum() == -1.0
+                {
+                    pos_resolution.col = pos_kriterian_row.col;
+                    max_value = self[pos_kriterian_row].abs();
                     is_optimum = false;
-                    break;
                 }
             }
             if is_optimum == true {
@@ -410,14 +444,12 @@ impl Matrix {
                 .iter_skip(Direction::Col, pos_resolution)
                 .take_while(move |pos| pos.col == pos_resolution.clone().col)
             {
-                let right_hand = self[PosElem::new(pos_resolution_col.row, self.count.col - 1)];
                 if self[pos_resolution_col] <= ElementMatrix::default() {
                     continue;
                 }
-                let theta = self[PosElem::new(pos_resolution_col.row, self.count.col - 1)]
-                    / self[pos_resolution_col];
-                let theta_min = self[PosElem::new(pos_resolution.row, self.count.col - 1)]
-                    / self[pos_resolution];
+                let theta =
+                    self[PosElem::new(pos_resolution_col.row, 0)] / self[pos_resolution_col];
+                let theta_min = self[PosElem::new(pos_resolution.row, 0)] / self[pos_resolution];
                 if self[pos_resolution] <= ElementMatrix::default() || theta < theta_min {
                     pos_resolution = pos_resolution_col;
                 }
