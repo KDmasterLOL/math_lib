@@ -25,11 +25,6 @@ name = "math_library"
 path = "src/lib/lib.rs"
 crate_type = ["lib", "staticlib"]
 
-[lib]
-name = "WEB_UI"
-path = "WEB_UI/src/main.rs"
-crate_type = ["lib", "staticlib"]
-
 [[bin]]
 name = "tui_math"
 path = "src/tui/bin.rs"
