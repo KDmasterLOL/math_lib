@@ -259,6 +259,7 @@ impl Matrix {
         }
         augmented_matrix
     }
+
     pub fn new_simplex_table(
         criterian_function: &[ElementMatrix],
         constraints: &[ElementMatrix],
@@ -316,7 +317,9 @@ impl Matrix {
         }
         matrix
     }
-
+    pub fn change_size(&mut self, new_count: PosElem) {
+        self.count = new_count;
+    }
     fn find_row_or_col_with_zero(&self) -> Option<Box<dyn Iterator<Item = PosElem>>> {
         const BASE_SIZE: usize = 5;
         let mut count_zero = (
@@ -390,6 +393,7 @@ impl Matrix {
             basises.push(pos);
         }
     }
+
     pub fn to_basis(&mut self, pos_resolution_el: PosElem) {
         let value = self[pos_resolution_el];
         self.count
