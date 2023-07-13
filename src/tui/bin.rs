@@ -1,14 +1,14 @@
-use colored::Colorize;
+// use colored::Colorize;
+// use crossterm::{
+//     cursor,
+//     event::{self, Event, KeyCode, KeyEvent},
+//     execute, queue, style,
+//     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+//     terminal::EnterAlternateScreen,
+//     terminal::{self, ClearType, LeaveAlternateScreen},
+//     Command, QueueableCommand, Result,
+// };
 use core::{num, slice};
-use crossterm::{
-    cursor,
-    event::{self, Event, KeyCode, KeyEvent},
-    execute, queue, style,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-    terminal::EnterAlternateScreen,
-    terminal::{self, ClearType, LeaveAlternateScreen},
-    Command, QueueableCommand, Result,
-};
 use std::{
     collections::HashMap,
     fmt::{format, Display},
@@ -40,84 +40,30 @@ macro_rules! slice_array {
     }
 }
 
-fn solve_LP() {
+fn solve_lp() {
     let source_task = Matrix::from(slice_array!(
-        [0,-14, -18, 0, 0, 0],
-        [168,10, 8, 1, 0, 0],
-        [180,5, 10, 0, 1, 0],
+        [0, -14, -18, 0, 0, 0],
+        [-168, 10, 8, 1, 0, 0],
+        [180, 5, 10, 0, 1, 0],
         [144, 6, 12, 0, 0, 1]
     ));
     let mut resolve_task = source_task.clone();
     resolve_task.simplex(0);
     println!("Resolve task: {}", resolve_task);
-    // let double_task = Matrix::from(slice_array!(
-    //     [168, 180, 144, 0, 0, 0, 0, 0],
-    //     [10, 5, 6, -1, 0, 1, 0, 14],
-    //     [8, 10, 12, 0, -1, 0, 1, 18]
-    // ));
-    // println!("OP double_task: {}", double_task);
-    // double_task.to_basis(PosElem::new(1,0));
-    // println!("OP double_task: {}", double_task);
-    // double_task.to_basis(PosElem::new(2,2));
-    // println!("OP double_task: {}", double_task);
-
-    // let mut first_op = Matrix::from(slice_array!(
-    //     [0, 168, 180, 144, 0, 0, 0, 0],
-    //     [-32, -18, -15, -18, 1, 1, 0, 0],
-    //     [14, 10, 5, 6, -1, 0, 1, 0],
-    //     [18, 8, 10, 12, 0, -1, 0, 1]
-    // ));
-    // println!("{}", first_op);
-    // first_op.simplex(1);
-    // println!("{}", first_op);
-    // first_op.to_basis(PosElem::new(2,0));
-    // println!("{}", first_op);
-    // first_op.to_basis(PosElem::new(3,2));
-    // println!("{}", first_op);
-    // first_op.to_basis(PosElem::new(2,0));
-    // println!("{}", first_op);
-    // let mut resolution_double_task = first_op.clone();
-    // resolution_double_task
-    //     .count
-    //     .iter(Direction::Row)
-    //     .take_while(|p| p.row == 0)
-    //     .for_each(|pos| resolution_double_task[pos] = -double_task[pos]);
-    // println!("{}", resolution_double_task);
-    // resolution_double_task.simplex();
-    // println!("{}", resolution_double_task);
-    // resolution_double_task
 }
 
 fn main() {
-    solve_LP();
-    // let simplex_table = Matrix::new_simplex_table(slice_array!([3,4];f64),slice_array!([3,4];f64),slice_array!([3,4],[56,6]));
-    // println!("{}", simplex_table)
-    // slice_array!(
-    //     [0, 0, -2, -3, -4, 0, 0],
-    //     [3, -1, -2, -1, 1, 0, -3],
-    //     [4, -2, 1, -3, 0, 1, -4]
-    // );
-    // let simplex_table = Matrix::new_simplex_table(
-    //     slice_array!([3,4];f64),
-    //     slice_array!([3,4];f64),
-    //     slice_array!([3, 4], [56, 6]),
-    // );
-    // println!("{}", simplex_table)
-    // let mut mat = Matrix::from(slice_array!(
-    //     [-6.5, 0, 7.5, -23.5, 5, 0],
-    //     [1, 3, 1, 4, -1, 12],
-    //     [2, 0, -1, 12, -1, 14],
-    //     [1, 2, 0, 3, -1, 6]
+    solve_lp();
+
+    // let source_task = Matrix::from(slice_array!(
+    //     [0, 6.5, 0, -7.5, 23.5, -5],
+    //     [12, 1, 3, 1, 4, -1],
+    //     [14, 2, 0, -1, 12, -1],
+    //     [6, 1, 2, 0, 3, -1]
     // ));
-
-    // println!("{}", mat);
-    // mat.to_basis(PosElem::new(1, 0));
-    // println!("{}", mat);
-    // mat.to_basis(PosElem::new(2, 1));
-    // println!("{}", mat);
-    // mat.to_basis(PosElem::new(3, 2));
-    // println!("{}", mat);
-
+    // let mut resolve_task = source_task.clone();
+    // resolve_task.simplex(0);
+    // println!("Resolve task: {}", resolve_task);
 }
 
 // fn main() -> Result<()> {

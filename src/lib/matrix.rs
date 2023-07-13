@@ -427,7 +427,7 @@ impl Matrix {
                 .take_while(|pos| pos.row == kriterian_row)
             {
                 let kriterian_value = self[pos_kriterian_row];
-                if max_value < kriterian_value.abs()
+                if kriterian_value.abs() > max_value
                     && kriterian_value.abs() > ElementMatrix::EPSILON
                     && self[pos_kriterian_row].signum() == -1.0
                 {
