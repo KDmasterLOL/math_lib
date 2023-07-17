@@ -89,6 +89,18 @@ impl AddAssign for PosElem {
         self.col += rhs.col;
     }
 }
+impl AddAssign<(isize, isize)> for PosElem {
+    fn add_assign(&mut self, rhs: (isize, isize)) {
+        self.row = self
+            .row
+            .checked_add_signed(rhs.0)
+            .expect("Overflow addition of PosElem and isize in  AddAssign");
+        self.col = self
+            .col
+            .checked_add_signed(rhs.1)
+            .expect("Overflow addition of PosElem and isize in  AddAssign");
+    }
+}
 impl AddAssign<usize> for PosElem {
     fn add_assign(&mut self, rhs: usize) {
         self.row += rhs;
@@ -262,10 +274,10 @@ impl Matrix {
 
     pub fn new_simplex_table(
         criterian_function: &[ElementMatrix],
-        constraints: &[ElementMatrix],
+        constraints: &[(char, ElementMatrix)],
         coefficient_table: &[&[ElementMatrix]],
     ) -> Self {
-        let count = PosElem::new(criterian_function.len() + 1, constraints.len() + 1);
+        let count = PosElem::new(constraints.len() + 1, criterian_function.len() + 1);
         let mut simplex_table = Self::new(count, ElementMatrix::default());
         for pos in count.iter(Direction::Row) {
             simplex_table[pos] = if pos == PosElem::zero() {
@@ -273,7 +285,16 @@ impl Matrix {
             } else if pos.row == 0 {
                 criterian_function[pos.col - 1]
             } else if pos.col == 0 {
-                constraints[pos.row - 1]
+                if constraints[pos.row - 1].0 != '=' {
+                    simplex_table.offset_size((0, 1).into());
+                    let target_pos = PosElem::new(pos.row, simplex_table.count.col - 1);
+                    simplex_table[target_pos] = if constraints[pos.row - 1].0 == '≥' {
+                        -1f64
+                    } else {
+                        1f64
+                    }
+                }
+                constraints[pos.row - 1].1
             } else {
                 coefficient_table[pos.row - 1][pos.col - 1]
             }
@@ -317,9 +338,13 @@ impl Matrix {
         }
         matrix
     }
-    pub fn change_size(&mut self, new_count: PosElem) {
+    pub fn offset_size(&mut self, offset: PosElem) {
+        self.count += offset;
+    }
+    pub fn resize(&mut self, new_count: PosElem) {
         self.count = new_count;
     }
+
     fn find_row_or_col_with_zero(&self) -> Option<Box<dyn Iterator<Item = PosElem>>> {
         const BASE_SIZE: usize = 5;
         let mut count_zero = (

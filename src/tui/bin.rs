@@ -53,7 +53,13 @@ fn solve_lp() {
 }
 
 fn main() {
-    solve_lp();
+    // solve_lp();
+    let mat = Matrix::new_simplex_table(
+        slice_array!([2,3,4];f64),
+        &[('=', 2f64), ('≤', 3f64)],
+        slice_array!([2, 2, 2], [2, 2, 2]),
+    );
+    println!("{}", mat);
 
     // let source_task = Matrix::from(slice_array!(
     //     [0, 6.5, 0, -7.5, 23.5, -5],
