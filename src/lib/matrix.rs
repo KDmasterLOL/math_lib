@@ -338,7 +338,7 @@ impl Matrix {
         }
         matrix
     }
-    pub fn offset_size(&mut self, offset: PosElem) {
+    pub fn offset_size(&mut self, offset: (isize, isize)) {
         self.count += offset;
     }
     pub fn resize(&mut self, new_count: PosElem) {
